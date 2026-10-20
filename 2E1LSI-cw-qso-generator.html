@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>2E1LSI CW QSO Generator</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: transceiver front panel — controls column on the left, a "display window" with the QSO transcript on the right, copy practice beneath it. */
+:root{
+  --bg:#e9ecef; --panel:#f7f8f9; --ink:#1a2028; --muted:#5a6470; --line:#c6ccd3;
+  --screen:#e2e9e7; --screen-ink:#18231f; --accent:#245a8c; --accent-ink:#ffffff;
+  --stA:#16705a; --stB:#7a45a8; --good:#1d7a3a; --bad:#a3352b; --now:#f2d36b;
+  --f-display:"Barlow Condensed","Arial Narrow",sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#14181d; --panel:#1d232a; --ink:#e4e8ec; --muted:#97a1ad; --line:#323a44;
+  --screen:#0f1517; --screen-ink:#cfe3da; --accent:#7eb0e2; --accent-ink:#0d1620;
+  --stA:#5cc7a6; --stB:#c49be8; --good:#6fcf8a; --bad:#ef8a7e; --now:#6b5a18; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#14181d; --panel:#1d232a; --ink:#e4e8ec; --muted:#97a1ad; --line:#323a44;
+  --screen:#0f1517; --screen-ink:#cfe3da; --accent:#7eb0e2; --accent-ink:#0d1620;
+  --stA:#5cc7a6; --stB:#c49be8; --good:#6fcf8a; --bad:#ef8a7e; --now:#6b5a18; color-scheme:dark}
+
+html,body{background:var(--bg);color:var(--ink)}
+body{margin:0;font-family:var(--f-body);font-size:15px;line-height:1.5;-webkit-text-size-adjust:100%}
+.wrap{max-width:1120px;margin:0 auto;padding-block:20px 40px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  display:grid;gap:18px}
+header{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:6px 20px}
+h1{font-family:var(--f-display);font-weight:600;font-size:2rem;letter-spacing:.02em;margin:0;text-wrap:balance}
+header p{margin:0;color:var(--muted);max-width:60ch}
+.grid{display:grid;grid-template-columns:300px minmax(0,1fr);gap:18px;align-items:start}
+@media (max-width:820px){.grid{grid-template-columns:minmax(0,1fr)}.grid>.main{order:-1}}
+@media (max-width:520px){
+  h1{font-size:1.6rem}
+  .wrap{padding-block:12px 28px;gap:14px}
+  .transport.top{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .transport.top button{padding:12px 8px}
+  #log{font-size:1rem;min-height:160px;padding:12px}
+  .over{gap:8px}
+  .status{padding:8px 12px}
+}
+@media (hover:none),(max-width:520px){.kbd{display:none}}
+
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:16px;display:grid;gap:16px}
+.lbl{font-family:var(--f-display);font-weight:500;text-transform:uppercase;letter-spacing:.08em;font-size:.95rem;color:var(--muted)}
+fieldset{border:0;margin:0;padding:0;display:grid;gap:10px}
+fieldset+fieldset{box-shadow:0 -1px 0 var(--line);padding-top:14px}
+legend{padding:0;margin-bottom:8px}
+.row{display:grid;grid-template-columns:1fr auto;align-items:center;gap:2px 10px}
+.row input[type=range]{grid-column:1/-1;width:100%;accent-color:var(--accent)}
+.row output{font-family:var(--f-mono);font-variant-numeric:tabular-nums;font-size:.9rem}
+.check{display:flex;align-items:center;gap:8px;cursor:pointer}
+.check input{accent-color:var(--accent);width:16px;height:16px}
+select{font:inherit;font-size:16px;padding:6px 8px;border:1px solid var(--line);border-radius:4px;background:var(--bg);color:var(--ink);width:100%}
+input:disabled+output,.row:has(input:disabled){opacity:.55}
+
+.seg{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--line);border-radius:4px;overflow:hidden}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg label{text-align:center;padding:6px 4px;cursor:pointer;font-size:.88rem;border-left:1px solid var(--line)}
+.seg label:first-of-type{border-left:0}
+.seg input:checked+label{background:var(--accent);color:var(--accent-ink)}
+.seg input:focus-visible+label{outline:2px solid var(--accent);outline-offset:-3px}
+.hint{font-size:.85rem;color:var(--muted);margin:0}
+
+.main{display:grid;gap:18px;min-width:0}
+.transport{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+button{font:inherit;font-weight:500;border-radius:4px;padding:9px 16px;cursor:pointer;border:1px solid var(--line);background:var(--panel);color:var(--ink)}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+button:disabled{opacity:.45;cursor:default}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.kbd{margin-left:auto;font-size:.82rem;color:var(--muted)}
+kbd{font-family:var(--f-mono);font-size:.8rem;border:1px solid var(--line);border-radius:3px;padding:0 4px}
+
+.screen{background:var(--screen);color:var(--screen-ink);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.status{display:flex;flex-wrap:wrap;gap:4px 16px;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--line);font-family:var(--f-mono);font-size:.85rem;font-variant-numeric:tabular-nums}
+.bar{height:3px;background:var(--line)}
+.bar i{display:block;height:100%;width:0;background:var(--accent)}
+#log{padding:14px;display:grid;gap:12px;min-height:220px;align-content:start;font-family:var(--f-mono);font-size:1.05rem}
+.over{display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px;align-items:start}
+.badge{display:inline-flex;gap:6px;align-items:baseline;font-family:var(--f-display);font-weight:600;font-size:1rem;letter-spacing:.05em;
+  border:1px solid currentColor;border-radius:3px;padding:0 6px;min-width:1.6em;justify-content:center}
+.over[data-from=A] .badge{color:var(--stA)} .over[data-from=B] .badge{color:var(--stB)}
+.badge .call{display:none;font-family:var(--f-mono);font-weight:500;font-size:.85rem;letter-spacing:0}
+#log.revealed .badge .call{display:inline}
+.txt{white-space:pre-wrap;word-break:break-word;min-width:0}
+.tk.pro{text-decoration:overline}
+.tk.now{background:var(--now);border-radius:2px}
+#log:not(.revealed) .over:not(.started){display:none}
+#log.mode-live:not(.revealed) .tk:not(.sent){display:none}
+#log.mode-hidden:not(.revealed) .tk{display:none}
+#log.mode-hidden:not(.revealed) .over.current .txt::after{content:"sending…";color:var(--muted);font-family:var(--f-body);font-size:.9rem}
+.idle{color:var(--muted);font-family:var(--f-body);font-size:.95rem;display:grid;gap:8px;max-width:62ch}
+.idle .demo{font-family:var(--f-mono);color:var(--screen-ink)}
+
+.copy{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:16px;display:grid;gap:12px}
+.copy-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:8px}
+textarea{font-family:var(--f-mono);font-size:1rem;width:100%;box-sizing:border-box;min-height:90px;resize:vertical;padding:10px;border:1px solid var(--line);border-radius:4px;background:var(--bg);color:var(--ink);text-transform:uppercase}
+textarea:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+#checks{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px}
+#checks li{border:1px solid var(--line);border-left-width:4px;border-radius:4px;padding:6px 10px;display:grid;gap:2px}
+#checks li.got{border-left-color:var(--good)} #checks li.miss{border-left-color:var(--bad)}
+#checks .k{font-size:.8rem;color:var(--muted)}
+#checks .v{font-family:var(--f-mono)}
+#checks .s{font-size:.8rem;font-weight:600} li.got .s{color:var(--good)} li.miss .s{color:var(--bad)}
+#score{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+@media (prefers-reduced-motion:reduce){.bar i{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>2E1LSI CW QSO Generator</h1>
+    <p>Random CW contacts between two stations, played in your browser, for receive practice.</p>
+  </header>
+
+  <div class="grid">
+    <aside class="panel" aria-label="Settings">
+      <fieldset>
+        <legend class="lbl">Speed</legend>
+        <div class="row"><label for="wpm">Character speed</label><output id="wpmOut">18 WPM</output>
+          <input type="range" id="wpm" min="5" max="40" step="1" value="18"></div>
+        <label class="check"><input type="checkbox" id="farns"> Farnsworth spacing</label>
+        <div class="row"><label for="eff">Effective speed</label><output id="effOut">12 WPM</output>
+          <input type="range" id="eff" min="5" max="40" step="1" value="12" disabled></div>
+        <label class="check"><input type="checkbox" id="vary" checked> Stations send at slightly different speeds</label>
+      </fieldset>
+
+      <fieldset>
+        <legend class="lbl">Audio</legend>
+        <div class="row"><label for="pitchA">Station A tone</label><output id="pitchAOut">800 Hz</output>
+          <input type="range" id="pitchA" min="400" max="1000" step="10" value="800"></div>
+        <div class="row"><label for="pitchB">Station B tone</label><output id="pitchBOut">750 Hz</output>
+          <input type="range" id="pitchB" min="400" max="1000" step="10" value="750"></div>
+        <div class="row"><label for="vol">Volume</label><output id="volOut">60%</output>
+          <input type="range" id="vol" min="0" max="100" step="1" value="60"></div>
+        <div class="row"><label for="noise">Band noise</label><output id="noiseOut">off</output>
+          <input type="range" id="noise" min="0" max="100" step="1" value="0"></div>
+      </fieldset>
+
+      <fieldset>
+        <legend class="lbl">QSO</legend>
+        <label for="style" class="hint">Exchange length</label>
+        <select id="style">
+          <option value="short">Short — calls and RST</option>
+          <option value="standard" selected>Standard — adds name and QTH</option>
+          <option value="rag">Ragchew — adds rig, power, antenna, WX</option>
+        </select>
+        <label class="check"><input type="checkbox" id="cut" checked> Cut numbers in RST (5NN)</label>
+      </fieldset>
+
+      <fieldset>
+        <legend class="lbl">Text display</legend>
+        <div class="seg" role="radiogroup" aria-label="Text display">
+          <input type="radio" name="mode" id="m-live" value="live" checked><label for="m-live">Live</label>
+          <input type="radio" name="mode" id="m-full" value="full"><label for="m-full">Whole over</label>
+          <input type="radio" name="mode" id="m-hidden" value="hidden"><label for="m-hidden">Hidden</label>
+        </div>
+        <p class="hint" id="modeHint">Characters appear as they are sent.</p>
+      </fieldset>
+    </aside>
+
+    <section class="main">
+      <div class="transport top">
+        <button class="primary" id="gen">Generate QSO</button>
+        <button id="replay" disabled>Replay</button>
+        <button id="pause" disabled>Pause</button>
+        <button id="reveal" disabled>Show text</button>
+        <span class="kbd"><kbd>G</kbd> generate · <kbd>R</kbd> replay · <kbd>P</kbd> or <kbd>Esc</kbd> pause/resume</span>
+      </div>
+
+      <div class="screen">
+        <div class="status"><span id="stLeft">Ready</span><span id="stRight">—</span></div>
+        <div class="bar"><i id="barFill"></i></div>
+        <div id="log" class="mode-live" aria-live="polite">
+          <div class="idle" id="idle">
+            <div>Press <b>Generate QSO</b> to hear a new contact. Audio starts when you click.</div>
+            <div>A typical over looks like this:</div>
+            <div class="demo">G4ABC DE PY2XYZ R GE TNX FER RPT <span class="tk pro">BT</span> UR RST 57N 57N <span class="tk pro">BT</span> NAME PAULO …</div>
+            <div>Prosigns sent as one character are shown with a bar over them. Choose <b>Hidden</b> to copy by ear, then check your copy below.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="copy">
+        <div class="copy-head"><span class="lbl">Your copy</span><span id="score"></span></div>
+        <textarea id="copytext" placeholder="Type what you copy, e.g. calls, RST, names, QTH" spellcheck="false" autocomplete="off"></textarea>
+        <div class="transport"><button id="check" disabled>Check copy</button><span class="hint">Compares your copy with the key details of the last QSO.</span></div>
+        <ul id="checks"></ul>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script id="core">
+/* ---------- Morse tables and timing (pure, no DOM) ---------- */
+const MORSE={A:'.-',B:'-...',C:'-.-.',D:'-..',E:'.',F:'..-.',G:'--.',H:'....',I:'..',J:'.---',K:'-.-',L:'.-..',M:'--',
+  N:'-.',O:'---',P:'.--.',Q:'--.-',R:'.-.',S:'...',T:'-',U:'..-',V:'...-',W:'.--',X:'-..-',Y:'-.--',Z:'--..',
+  '0':'-----','1':'.----','2':'..---','3':'...--','4':'....-','5':'.....','6':'-....','7':'--...','8':'---..','9':'----.',
+  '/':'-..-.','?':'..--..','.':'.-.-.-',',':'--..--','=':'-...-'};
+const PROSIGNS={KN:'-.--.',SK:'...-.-',BT:'-...-',AR:'.-.-.',BK:'-...-.-'};
+
+function tokenize(text){return text.trim().replace(/\s+/g,' ').match(/<[A-Z]+>|./g)||[]}
+function codeFor(tok){return tok.length>1?PROSIGNS[tok.slice(1,-1)]:MORSE[tok]}
+
+/* PARIS timing: dot = 1.2/wpm s. Farnsworth spreads only the gaps (ARRL formula). */
+function timeOver(tokens,wpm,eff){
+  const dot=1.2/wpm;
+  let charGap=3*dot,wordGap=7*dot;
+  if(eff&&eff<wpm){const ta=(60*wpm-37.2*eff)/(wpm*eff);charGap=3*ta/19;wordGap=7*ta/19}
+  const elements=[],starts=[];let t=0;
+  tokens.forEach((tok,i)=>{
+    starts.push(t);
+    if(tok===' '){t+=wordGap;return}
+    const code=codeFor(tok);if(!code)return;
+    for(let j=0;j<code.length;j++){const len=code[j]==='.'?dot:3*dot;elements.push([t,t+len]);t+=len;if(j<code.length-1)t+=dot}
+    const next=tokens[i+1];if(next&&next!==' ')t+=charGap;
+  });
+  return{elements,starts,duration:t};
+}
+
+/* ---------- QSO generator ---------- */
+const rnd=n=>Math.floor(Math.random()*n);
+const pick=a=>a[rnd(a.length)];
+const ALPHA='ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+const NAMES={
+  EN:['JOHN','BOB','MIKE','DAVE','PETE','TOM','JIM','ANDY','SUE','KATE','STEVE','PAUL','ROB','ANN'],
+  DE:['HANS','KLAUS','UWE','JENS','PETRA','JURGEN','DIRK','KARL'],
+  FR:['JEAN','PIERRE','MARC','LUC','ALAIN','MARIE'],
+  ES:['JOSE','LUIS','PACO','ANA','CARLOS','JAVI','PEPE'],
+  PT:['JOAO','PAULO','RUI','ZE','CARLOS','LUIS','ANA','TONI'],
+  IT:['MARCO','LUCA','GIANNI','PAOLO','FRANCO'],
+  NL:['JAN','PIET','KEES','HENK','WIM'],
+  NO:['LARS','ERIK','OLE','JARI','PEKKA','TOVE'],
+  SL:['IVAN','PAVEL','JAN','OLEG','PIOTR','VLAD','TOMAS','MARKO'],
+  HU:['LASZLO','ZOLI','ATTILA','GABOR'],
+  GR:['NIKOS','GIORGOS','KOSTAS'],
+  TR:['MEHMET','ALI','AHMET'],
+  JA:['TAKA','KEN','HIRO','YUKI','MASA']};
+const D='0123456789';
+const UK=['LEEDS','YORK','BRISTOL','LONDON','NORWICH','EXETER','LEICESTER','HULL'];
+const US=['DENVER CO','BOSTON MA','AUSTIN TX','SEATTLE WA','DAYTON OH','TAMPA FL'];
+const PREFIXES=[
+  {p:'G',d:'034678',r:'EN',q:UK},{p:'M',d:'013567',r:'EN',q:UK},{p:'2E',d:'01',r:'EN',q:UK},
+  {p:'MW',d:'0',r:'EN',q:['CARDIFF','SWANSEA','BANGOR']},{p:'MM',d:'0',r:'EN',q:['GLASGOW','EDINBURGH','ABERDEEN']},
+  {p:'2M',d:'0',r:'EN',q:['GLASGOW','DUNDEE','INVERNESS']},{p:'EI',d:'2345789',r:'EN',q:['DUBLIN','CORK','GALWAY']},
+  {p:'W',d:D,r:'EN',q:US},{p:'K',d:D,r:'EN',q:US},{p:'N',d:D,r:'EN',q:US},{p:'WA',d:D,r:'EN',q:US},{p:'KA',d:D,r:'EN',q:US},
+  {p:'VE',d:'1234567',r:'EN',q:['TORONTO','MONTREAL','OTTAWA','VANCOUVER']},{p:'VA',d:'2367',r:'EN',q:['TORONTO','MONTREAL','VICTORIA']},
+  {p:'DL',d:D,r:'DE',q:['BERLIN','MUNICH','HAMBURG','KOLN']},{p:'DK',d:D,r:'DE',q:['BREMEN','DRESDEN','KASSEL']},
+  {p:'F',d:'12345689',r:'FR',q:['PARIS','LYON','NANTES','TOULOUSE']},{p:'LX',d:'1',r:'FR',q:['LUXEMBOURG']},
+  {p:'EA',d:'123456789',r:'ES',q:['MADRID','VALENCIA','SEVILLA','BILBAO']},{p:'LU',d:'123456789',r:'ES',q:['BUENOS AIRES','CORDOBA','ROSARIO']},
+  {p:'OA',d:'4',r:'ES',q:['LIMA','CUSCO']},{p:'YW',d:'5',r:'ES',q:['CARACAS']},
+  {p:'CT',d:'1234567',r:'PT',q:['LISBOA','PORTO','COIMBRA','FARO']},{p:'PY',d:'123456789',r:'PT',q:['SAO PAULO','RIO','PORTO ALEGRE','CURITIBA','RECIFE']},
+  {p:'I',d:'012345678',r:'IT',q:['ROMA','MILANO','TORINO','NAPOLI']},{p:'IU',d:'012345678',r:'IT',q:['BOLOGNA','GENOVA','PALERMO']},
+  {p:'PA',d:D,r:'NL',q:['AMSTERDAM','UTRECHT','DELFT']},{p:'LA',d:'123456789',r:'NO',q:['OSLO','BERGEN','TROMSO']},
+  {p:'OH',d:'123456789',r:'NO',q:['HELSINKI','TAMPERE','OULU']},{p:'OY',d:'1',r:'NO',q:['TORSHAVN']},{p:'ES',d:'12345678',r:'NO',q:['TALLINN','TARTU']},
+  {p:'SP',d:'123456789',r:'SL',q:['WARSZAWA','KRAKOW','GDANSK']},{p:'OK',d:'12',r:'SL',q:['PRAHA','BRNO']},
+  {p:'S5',d:'123456789',r:'SL',q:['LJUBLJANA','MARIBOR']},{p:'9A',d:'1234567',r:'SL',q:['ZAGREB','SPLIT']},
+  {p:'UA',d:'1346',r:'SL',q:['MOSCOW','KAZAN']},{p:'RA',d:'1346',r:'SL',q:['SAMARA','TULA']},{p:'UR',d:D,r:'SL',q:['KYIV','LVIV','ODESA']},
+  {p:'YO',d:'23456789',r:'SL',q:['BUCURESTI','CLUJ','IASI']},{p:'HA',d:'12345678',r:'HU',q:['BUDAPEST','DEBRECEN']},
+  {p:'SV',d:'123456789',r:'GR',q:['ATHENS','PATRAS']},{p:'TA',d:'1234567',r:'TR',q:['ANKARA','ISTANBUL','IZMIR']},
+  {p:'JA',d:D,r:'JA',q:['TOKYO','OSAKA','NAGOYA','SAPPORO']},{p:'VK',d:'12345678',r:'EN',q:['SYDNEY','PERTH','BRISBANE','ADELAIDE']}];
+
+function genStation(){
+  const e=pick(PREFIXES);
+  const n=rnd(10),len=n>2?3:n>0?2:1;            // 70% 3-letter, 20% 2-letter, 10% 1-letter suffix (as in the Java original)
+  let call=e.p+pick(e.d.split(''));for(let i=0;i<len;i++)call+=pick(ALPHA);
+  const rig=pick(['IC7300','IC705','FT991A','FTDX10','K3','KX2','TS590','FT817']);
+  const qrp=['IC705','KX2','FT817'].includes(rig);
+  return{call,name:pick(NAMES[e.r]),qth:pick(e.q),rig,pwr:qrp?pick([5,5,10]):pick([50,100,100,100,400]),
+    ant:pick(['DIPOLE','EFHW','VERTICAL','3 EL YAGI','LOOP','G5RV']),wx:pick(['SUNNY','CLOUDY','RAIN','WINDY','OVERCAST','FOG']),temp:2+rnd(27)};
+}
+function genRST(){const r=pick([3,4,4,5,5,5,5,5]);const s=Math.max(1,Math.min(9,r+rnd(7)-2));return`${r}${s}9`}
+const cutRST=r=>r.slice(0,1)+r.slice(1).replace(/9/g,'N').replace(/0/g,'T');
+
+function generateQSO(style,cut){
+  const A=genStation();let B;do{B=genStation()}while(B.call===A.call);
+  const rB=genRST(),rA=genRST();               // rB: report A gives B; rA: report B gives A
+  const sB=cut?cutRST(rB):rB,sA=cut?cutRST(rA):rA;
+  const gr=pick(['GM','GA','GE']);
+  const a=A.call,b=B.call;
+  const extra=s=>` <BT> RIG ${s.rig} PWR ${s.pwr}W ANT ${s.ant} <BT> WX ${s.wx} TEMP ${s.temp}C`;
+  let overs;
+  if(style==='short'){
+    overs=[
+      ['A',`CQ CQ CQ DE ${a} ${a} K`],
+      ['B',`${a} DE ${b} ${b} K`],
+      ['A',`${b} DE ${a} TNX FER CALL UR RST ${sB} ${sB} <BT> HW? ${b} DE ${a} <KN>`],
+      ['B',`${a} DE ${b} R TNX FER RPT UR RST ${sA} ${sA} <BT> TU 73 ${a} DE ${b} <SK>`],
+      ['A',`TU 73 <SK> EE`]];
+  }else{
+    const x=style==='rag';
+    overs=[
+      ['A',`CQ CQ CQ DE ${a} ${a} ${a} K`],
+      ['B',`${a} DE ${b} ${b} K`],
+      ['A',`${b} DE ${a} ${gr} ES TNX FER CALL <BT> UR RST ${sB} ${sB} <BT> NAME ${A.name} ${A.name} <BT> QTH ${A.qth} ${A.qth}${x?extra(A):''} <BT> HW? ${b} DE ${a} <KN>`],
+      ['B',`${a} DE ${b} R ${gr} ${A.name} TNX FER RPT <BT> UR RST ${sA} ${sA} <BT> NAME ${B.name} ${B.name} <BT> QTH ${B.qth} ${B.qth}${x?extra(B):''} <BT> ${a} DE ${b} <KN>`],
+      ['A',`${b} DE ${a} R TNX ${B.name} FB QSO <BT> 73 ES GL ${b} DE ${a} <SK>`],
+      ['B',`${a} DE ${b} R TU ${A.name} 73 <SK> EE`]];
+  }
+  const checks=[
+    {k:'Station A call',v:a},{k:'Station B call',v:b},
+    {k:'RST sent to B',v:rB},{k:'RST sent to A',v:rA}];
+  if(style!=='short')checks.push({k:'A name',v:A.name},{k:'A QTH',v:A.qth},{k:'B name',v:B.name},{k:'B QTH',v:B.qth});
+  if(style==='rag')checks.push({k:'A rig',v:A.rig},{k:'B rig',v:B.rig});
+  let off=0;while(off===0)off=rnd(7)-3;
+  return{A,B,overs:overs.map(([from,text])=>({from,text})),checks,speedOffset:off};
+}
+
+/* Copy checker: whole-word match; RST accepts cut numbers either way. */
+function checkCopy(text,checks){
+  const toks=text.toUpperCase().replace(/[^A-Z0-9/ ]+/g,' ').split(/\s+/).filter(Boolean)
+    .map(t=>/^[1-5][1-9NT][1-9NT]$/.test(t)?t[0]+t.slice(1).replace(/N/g,'9').replace(/T/g,'0'):t);
+  const hay=' '+toks.join(' ')+' ';
+  return checks.map(c=>({...c,got:hay.includes(' '+c.v+' ')}));
+}
+</script>
+
+<script>
+/* ---------- UI and audio ---------- */
+const $=id=>document.getElementById(id);
+const S={wpm:18,farns:false,eff:12,vary:true,pitchA:800,pitchB:750,vol:60,noise:0,style:'standard',cut:true,mode:'live'};
+try{Object.assign(S,JSON.parse(localStorage.getItem('cwqso.settings')||'{}'))}catch(e){}
+const save=()=>{try{localStorage.setItem('cwqso.settings',JSON.stringify(S))}catch(e){}};
+
+const MODE_HINT={live:'Characters appear as they are sent.',full:'Each over is shown in full as it starts, as in the original.',hidden:'Nothing is shown until the QSO ends. Copy by ear.'};
+
+function syncUI(){
+  $('wpm').value=S.wpm;$('wpmOut').textContent=S.wpm+' WPM';
+  $('farns').checked=S.farns;$('eff').disabled=!S.farns;
+  S.eff=Math.min(S.eff,S.wpm);$('eff').max=S.wpm;$('eff').value=S.eff;$('effOut').textContent=S.eff+' WPM';
+  $('vary').checked=S.vary;
+  $('pitchA').value=S.pitchA;$('pitchAOut').textContent=S.pitchA+' Hz';
+  $('pitchB').value=S.pitchB;$('pitchBOut').textContent=S.pitchB+' Hz';
+  $('vol').value=S.vol;$('volOut').textContent=S.vol+'%';
+  $('noise').value=S.noise;$('noiseOut').textContent=S.noise?S.noise+'%':'off';
+  $('style').value=S.style;$('cut').checked=S.cut;
+  $('m-'+S.mode).checked=true;$('modeHint').textContent=MODE_HINT[S.mode];
+  $('log').classList.remove('mode-live','mode-full','mode-hidden');$('log').classList.add('mode-'+S.mode);
+}
+const bind=(id,key,fn)=>$(id).addEventListener('input',e=>{S[key]=fn(e.target);syncUI();save();live()});
+bind('wpm','wpm',t=>+t.value);bind('eff','eff',t=>+t.value);bind('farns','farns',t=>t.checked);bind('vary','vary',t=>t.checked);
+bind('pitchA','pitchA',t=>+t.value);bind('pitchB','pitchB',t=>+t.value);bind('vol','vol',t=>+t.value);bind('noise','noise',t=>+t.value);
+bind('style','style',t=>t.value);bind('cut','cut',t=>t.checked);
+document.querySelectorAll('input[name=mode]').forEach(r=>r.addEventListener('change',e=>{S.mode=e.target.value;syncUI();save()}));
+syncUI();
+
+let ctx=null,master=null,qso=null,P=null,noiseBuf=null,ticker=null,wakeLock=null;
+const RISE=0.005,UP=new Float32Array(32),DOWN=new Float32Array(32);
+for(let i=0;i<32;i++){const v=0.5-0.5*Math.cos(Math.PI*i/31);UP[i]=v;DOWN[i]=1-v}
+const OVER_GAP=1.2,LEVEL=0.35,AHEAD=0.25;   // AHEAD: how far ahead (s) audio is scheduled; settings take effect within this window
+
+function ensureCtx(){
+  if(!ctx){ctx=new (window.AudioContext||window.webkitAudioContext)();master=ctx.createGain();master.connect(ctx.destination)}
+  if(ctx.state==='suspended')ctx.resume();
+  master.gain.setValueAtTime((S.vol/100)**2,ctx.currentTime);
+}
+function live(){                                 // apply settings to a QSO in progress
+  if(!ctx)return;const t=ctx.currentTime;
+  master.gain.setTargetAtTime((S.vol/100)**2,t,0.02);
+  if(!P)return;
+  P.osc.A.frequency.setTargetAtTime(S.pitchA,t,0.01);
+  P.osc.B.frequency.setTargetAtTime(S.pitchB,t,0.01);
+  P.bp.frequency.setTargetAtTime((S.pitchA+S.pitchB)/2,t,0.05);
+  P.noiseGain.gain.setTargetAtTime(S.noise/100*0.25,t,0.05);
+}
+function speeds(from){
+  const w=from==='B'&&S.vary?Math.max(5,Math.min(45,S.wpm+qso.speedOffset)):S.wpm;
+  return{w,e:S.farns?Math.min(S.eff,w):0};
+}
+/* Timing of one token at the current settings (PARIS; Farnsworth stretches only the gaps). */
+function stepFor(it){
+  const{w,e}=speeds(it.from),dot=1.2/w;
+  let cg=3*dot,wg=7*dot;
+  if(e&&e<w){const ta=(60*w-37.2*e)/(w*e);cg=3*ta/19;wg=7*ta/19}
+  if(it.tok===' ')return{els:[],dur:wg,after:0,w};
+  const code=codeFor(it.tok)||'',els=[];let t=0;
+  for(let j=0;j<code.length;j++){const len=code[j]==='.'?dot:3*dot;els.push([t,t+len]);t+=len;if(j<code.length-1)t+=dot}
+  return{els,dur:t,after:it.next&&it.next!==' '?cg:0,w};
+}
+const fmt=s=>{s=Math.max(0,Math.round(s));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')};
+
+function render(){
+  const log=$('log');log.innerHTML='';log.classList.remove('revealed');
+  const overs=[],items=[];
+  qso.overs.forEach((ov,oi)=>{
+    const row=document.createElement('div');row.className='over';row.dataset.from=ov.from;
+    const st=ov.from==='A'?qso.A:qso.B;
+    row.innerHTML=`<span class="badge"><span>${ov.from}</span><span class="call">${st.call}</span></span>`;
+    const txt=document.createElement('div');txt.className='txt';
+    const tokens=tokenize(ov.text);
+    tokens.forEach((tok,ti)=>{const s=document.createElement('span');s.className='tk';
+      if(tok.length>1){s.classList.add('pro');s.textContent=tok.slice(1,-1)}else s.textContent=tok;txt.appendChild(s);
+      items.push({oi,ti,tok,next:tokens[ti+1],from:ov.from,span:s})});
+    row.appendChild(txt);log.appendChild(row);overs.push({el:row,from:ov.from});
+  });
+  return{overs,items};
+}
+
+/* Look-ahead scheduler: keys the next few characters only, so speed changes apply almost immediately. */
+function pump(){
+  if(!P||P.paused)return;
+  const horizon=ctx.currentTime+AHEAD;
+  while(P.k<P.items.length&&P.next<horizon){
+    const it=P.items[P.k],st=stepFor(it),t0=P.next,g=P.key[it.from].gain;
+    for(const[on,off]of st.els){g.setValueCurveAtTime(UP,t0+on,RISE);g.setValueCurveAtTime(DOWN,t0+off,RISE)}
+    P.events.push({t:t0,k:P.k,w:st.w});
+    P.next=t0+st.dur+st.after;
+    const nx=P.items[P.k+1];if(nx&&nx.oi!==it.oi)P.next+=OVER_GAP;
+    P.k++;
+  }
+  if(P.k>=P.items.length&&P.end===null)P.end=P.next+0.2;
+}
+function startTicker(){                          // worker timer keeps scheduling when the tab is in the background
+  if(ticker)return;
+  try{ticker=new Worker(URL.createObjectURL(new Blob(['setInterval(()=>postMessage(0),25)'],{type:'text/javascript'})));ticker.onmessage=pump}
+  catch(e){setInterval(pump,25);ticker=true}
+}
+function estimate(k){
+  let t=0;for(let i=k;i<P.items.length;i++){const st=stepFor(P.items[i]);t+=st.dur+st.after;const nx=P.items[i+1];if(nx&&nx.oi!==P.items[i].oi)t+=OVER_GAP}
+  return t+0.2;
+}
+
+function play(){
+  teardown();ensureCtx();startTicker();
+  const{overs,items}=render();
+  const bus=ctx.createGain();bus.connect(master);
+  const osc={},key={};
+  for(const s of['A','B']){
+    const o=ctx.createOscillator();o.frequency.value=s==='A'?S.pitchA:S.pitchB;
+    const g=ctx.createGain();g.gain.setValueAtTime(0,ctx.currentTime);
+    const l=ctx.createGain();l.gain.value=LEVEL;
+    o.connect(g).connect(l).connect(bus);o.start();osc[s]=o;key[s]=g;
+  }
+  if(!noiseBuf){noiseBuf=ctx.createBuffer(1,ctx.sampleRate*2,ctx.sampleRate);const d=noiseBuf.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1}
+  const noise=ctx.createBufferSource();noise.buffer=noiseBuf;noise.loop=true;
+  const bp=ctx.createBiquadFilter();bp.type='bandpass';bp.frequency.value=(S.pitchA+S.pitchB)/2;bp.Q.value=1.2;
+  const noiseGain=ctx.createGain();noiseGain.gain.value=S.noise/100*0.25;
+  noise.connect(bp).connect(noiseGain).connect(bus);noise.start();
+  const start=ctx.currentTime+0.3;
+  P={overs,items,k:0,p:0,events:[],start,next:start,end:null,bus,osc,key,noise,bp,noiseGain,cur:null,curOver:null,curW:0,raf:0,paused:false};
+  try{navigator.wakeLock&&navigator.wakeLock.request('screen').then(l=>{wakeLock=l}).catch(()=>{})}catch(e){}
+  pump();
+  ['pause','replay','reveal','check'].forEach(id=>$(id).disabled=false);setPauseBtn();
+  P.raf=requestAnimationFrame(draw);
+}
+function draw(){
+  if(!P)return;const now=ctx.currentTime;
+  while(P.p<P.events.length&&P.events[P.p].t<=now){
+    const ev=P.events[P.p++],it=P.items[ev.k],ov=P.overs[it.oi];
+    if(it.ti===0){if(P.curOver)P.curOver.el.classList.remove('current');ov.el.classList.add('started','current');P.curOver=ov}
+    if(P.cur)P.cur.classList.remove('now');
+    it.span.classList.add('sent');if(it.tok!==' ')it.span.classList.add('now');P.cur=it.span;P.curW=ev.w;
+  }
+  const el=Math.max(0,now-P.start);
+  const rem=P.end!==null?Math.max(0,P.end-now):Math.max(0,P.next-now)+estimate(P.k);
+  $('barFill').style.width=Math.min(100,el/(el+rem)*100)+'%';
+  const oi=P.curOver?P.overs.indexOf(P.curOver):-1;
+  const where=oi>=0?`Over ${oi+1} of ${P.overs.length} · station ${P.curOver.from} · ${P.curW} WPM`:'Starting…';
+  $('stLeft').textContent=(P.paused?'Paused · ':'')+where;
+  $('stRight').textContent=fmt(el)+' / '+fmt(el+rem);
+  if(P.end!==null&&now>=P.end){finish();return}
+  P.raf=requestAnimationFrame(draw);
+}
+function teardown(){
+  if(!P)return;cancelAnimationFrame(P.raf);
+  for(const n of[P.osc.A,P.osc.B,P.noise]){try{n.stop()}catch(e){}}
+  P.bus.disconnect();if(P.cur)P.cur.classList.remove('now');P=null;
+  if(wakeLock){wakeLock.release().catch(()=>{});wakeLock=null}
+}
+function finish(){
+  const curOver=P.curOver;teardown();if(curOver)curOver.el.classList.remove('current');
+  $('log').classList.add('revealed');
+  $('stLeft').textContent=`QSO complete · ${qso.A.call} and ${qso.B.call}`;$('barFill').style.width='100%';
+  $('pause').disabled=true;$('reveal').disabled=true;setPauseBtn();
+}
+function setPauseBtn(){$('pause').textContent=P&&P.paused?'Resume':'Pause'}
+async function togglePause(){                    // suspending the audio clock freezes the QSO mid-character
+  if(!P)return;
+  P.paused=!P.paused;setPauseBtn();
+  try{if(P.paused)await ctx.suspend();else await ctx.resume()}catch(e){}
+}
+function newQSO(){
+  qso=generateQSO(S.style,S.cut);$('copytext').value='';$('checks').innerHTML='';$('score').textContent='';
+  play();
+}
+function showCheck(){
+  if(!qso)return;const res=checkCopy($('copytext').value,qso.checks);
+  $('checks').innerHTML=res.map(r=>`<li class="${r.got?'got':'miss'}"><span class="k">${r.k}</span><span class="v">${r.v}</span><span class="s">${r.got?'Copied':'Missed'}</span></li>`).join('');
+  $('score').textContent=`${res.filter(r=>r.got).length} of ${res.length} copied`;
+}
+
+$('gen').onclick=newQSO;
+$('replay').onclick=()=>{if(qso)play()};
+$('pause').onclick=togglePause;
+$('reveal').onclick=()=>$('log').classList.add('revealed');
+$('check').onclick=showCheck;
+document.addEventListener('keydown',e=>{
+  const tag=(e.target.tagName||'').toLowerCase();
+  if(e.key==='Escape'){e.preventDefault();togglePause();return}
+  if(tag==='textarea'||tag==='select'||tag==='input'||e.ctrlKey||e.metaKey||e.altKey)return;
+  if(e.key==='g'||e.key==='G'){e.preventDefault();newQSO()}
+  else if((e.key==='r'||e.key==='R')&&qso){e.preventDefault();play()}
+  else if(e.key==='p'||e.key==='P'){e.preventDefault();togglePause()}
+});
+</script>
+
+</body>
+</html>
